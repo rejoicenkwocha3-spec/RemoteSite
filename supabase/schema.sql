@@ -1,5 +1,5 @@
--- WorkNest AI Database Schema
--- Run this in your Supabase SQL Editor
+-- RemoteSite Database Schema
+-- Safe to re-run against any existing Supabase project
 
 -- ─────────────────────────────────────────
 -- PROFILES
@@ -8,25 +8,34 @@ create table if not exists public.profiles (
   id uuid references auth.users on delete cascade primary key,
   full_name text,
   avatar_url text,
-  created_at timestamptz default now()
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
 );
+
+alter table public.profiles add column if not exists full_name text;
+alter table public.profiles add column if not exists avatar_url text;
+alter table public.profiles add column if not exists created_at timestamptz default now();
+alter table public.profiles add column if not exists updated_at timestamptz default now();
 
 alter table public.profiles enable row level security;
 
+drop policy if exists "Users can view own profile" on public.profiles;
+drop policy if exists "Users can update own profile" on public.profiles;
+drop policy if exists "Users can insert own profile" on public.profiles;
+
 create policy "Users can view own profile"
-  on public.profiles for select
-  using (auth.uid() = id);
-
+  on public.profiles for select using (auth.uid() = id);
 create policy "Users can update own profile"
-  on public.profiles for update
-  using (auth.uid() = id);
+  on public.profiles for update using (auth.uid() = id);
+create policy "Users can insert own profile"
+  on public.profiles for insert with check (auth.uid() = id);
 
--- Auto-create profile on signup
 create or replace function public.handle_new_user()
 returns trigger as $$
 begin
   insert into public.profiles (id, full_name)
-  values (new.id, new.raw_user_meta_data->>'full_name');
+  values (new.id, new.raw_user_meta_data->>'full_name')
+  on conflict (id) do nothing;
   return new;
 end;
 $$ language plpgsql security definer;
@@ -37,356 +46,253 @@ create trigger on_auth_user_created
   for each row execute procedure public.handle_new_user();
 
 -- ─────────────────────────────────────────
--- WORKSPACES
--- ─────────────────────────────────────────
-create table if not exists public.workspaces (
-  id uuid default gen_random_uuid() primary key,
-  name text not null,
-  slug text unique,
-  owner_id uuid references auth.users on delete cascade not null,
-  created_at timestamptz default now()
-);
-
-alter table public.workspaces enable row level security;
-
-create policy "Workspace owner can update workspace"
-  on public.workspaces for update
-  using (owner_id = auth.uid());
-
-create policy "Authenticated users can create workspaces"
-  on public.workspaces for insert
-  with check (auth.uid() = owner_id);
-
--- ─────────────────────────────────────────
--- WORKSPACE MEMBERS
--- ─────────────────────────────────────────
-create table if not exists public.workspace_members (
-  id uuid default gen_random_uuid() primary key,
-  workspace_id uuid references public.workspaces on delete cascade not null,
-  user_id uuid references auth.users on delete cascade not null,
-  role text not null default 'member' check (role in ('admin', 'member', 'viewer')),
-  joined_at timestamptz default now(),
-  unique (workspace_id, user_id)
-);
-
-alter table public.workspace_members enable row level security;
-
-create policy "Members can view workspace members"
-  on public.workspace_members for select
-  using (
-    user_id = auth.uid() or
-    exists (
-      select 1 from public.workspaces
-      where id = workspace_members.workspace_id and owner_id = auth.uid()
-    )
-  );
-
-create policy "Admins can manage workspace members"
-  on public.workspace_members for all
-  using (
-    exists (
-      select 1 from public.workspaces
-      where id = workspace_members.workspace_id and owner_id = auth.uid()
-    )
-  );
-
--- Add workspace SELECT policy here (after workspace_members exists)
-create policy "Workspace members can view workspace"
-  on public.workspaces for select
-  using (
-    owner_id = auth.uid() or
-    exists (
-      select 1 from public.workspace_members
-      where workspace_id = workspaces.id and user_id = auth.uid()
-    )
-  );
-
--- ─────────────────────────────────────────
 -- PROJECTS
 -- ─────────────────────────────────────────
 create table if not exists public.projects (
   id uuid default gen_random_uuid() primary key,
-  workspace_id uuid references public.workspaces on delete cascade not null,
+  user_id uuid references auth.users on delete cascade not null,
   name text not null,
   description text,
-  status text not null default 'active' check (status in ('active', 'completed', 'archived')),
-  due_date date,
-  color text default '#1677E8',
-  created_by uuid references auth.users on delete set null,
+  location text,
+  status text not null default 'active',
+  completion_pct integer not null default 0,
+  start_date date,
+  end_date date,
+  budget numeric(12,2),
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
+
+alter table public.projects add column if not exists user_id uuid references auth.users on delete cascade;
+alter table public.projects add column if not exists description text;
+alter table public.projects add column if not exists location text;
+alter table public.projects add column if not exists status text not null default 'active';
+alter table public.projects add column if not exists completion_pct integer not null default 0;
+alter table public.projects add column if not exists start_date date;
+alter table public.projects add column if not exists end_date date;
+alter table public.projects add column if not exists budget numeric(12,2);
+alter table public.projects add column if not exists created_at timestamptz default now();
+alter table public.projects add column if not exists updated_at timestamptz default now();
 
 alter table public.projects enable row level security;
 
-create policy "Workspace members can view projects"
-  on public.projects for select
-  using (
-    exists (
-      select 1 from public.workspaces w
-      left join public.workspace_members wm on wm.workspace_id = w.id
-      where w.id = projects.workspace_id
-        and (w.owner_id = auth.uid() or wm.user_id = auth.uid())
-    )
-  );
+drop policy if exists "Users can view own projects" on public.projects;
+drop policy if exists "Users can insert own projects" on public.projects;
+drop policy if exists "Users can update own projects" on public.projects;
+drop policy if exists "Users can delete own projects" on public.projects;
 
-create policy "Workspace members can create projects"
-  on public.projects for insert
-  with check (
-    exists (
-      select 1 from public.workspaces w
-      left join public.workspace_members wm on wm.workspace_id = w.id
-      where w.id = workspace_id
-        and (w.owner_id = auth.uid() or wm.user_id = auth.uid())
-    )
-  );
-
-create policy "Workspace members can update projects"
-  on public.projects for update
-  using (
-    exists (
-      select 1 from public.workspaces w
-      left join public.workspace_members wm on wm.workspace_id = w.id
-      where w.id = projects.workspace_id
-        and (w.owner_id = auth.uid() or wm.user_id = auth.uid())
-    )
-  );
-
-create policy "Project creator or workspace admin can delete"
-  on public.projects for delete
-  using (created_by = auth.uid());
+create policy "Users can view own projects"
+  on public.projects for select using (auth.uid() = user_id);
+create policy "Users can insert own projects"
+  on public.projects for insert with check (auth.uid() = user_id);
+create policy "Users can update own projects"
+  on public.projects for update using (auth.uid() = user_id);
+create policy "Users can delete own projects"
+  on public.projects for delete using (auth.uid() = user_id);
 
 -- ─────────────────────────────────────────
--- TASKS
+-- MILESTONES
 -- ─────────────────────────────────────────
-create table if not exists public.tasks (
+create table if not exists public.milestones (
   id uuid default gen_random_uuid() primary key,
   project_id uuid references public.projects on delete cascade not null,
-  workspace_id uuid references public.workspaces on delete cascade not null,
   title text not null,
   description text,
-  status text not null default 'todo' check (status in ('todo', 'in-progress', 'in-review', 'completed')),
-  priority text not null default 'medium' check (priority in ('urgent', 'high', 'medium', 'low')),
-  assignee_id uuid references auth.users on delete set null,
+  status text not null default 'pending',
+  completion_pct integer not null default 0,
+  planned_date date,
+  actual_date date,
+  created_at timestamptz default now()
+);
+
+alter table public.milestones add column if not exists project_id uuid references public.projects on delete cascade;
+alter table public.milestones add column if not exists description text;
+alter table public.milestones add column if not exists status text not null default 'pending';
+alter table public.milestones add column if not exists completion_pct integer not null default 0;
+alter table public.milestones add column if not exists planned_date date;
+alter table public.milestones add column if not exists actual_date date;
+alter table public.milestones add column if not exists created_at timestamptz default now();
+
+alter table public.milestones enable row level security;
+
+drop policy if exists "Users can manage own milestones" on public.milestones;
+
+create policy "Users can manage own milestones"
+  on public.milestones for all
+  using (
+    exists (
+      select 1 from public.projects p
+      where p.id = milestones.project_id
+        and p.user_id = auth.uid()
+    )
+  );
+
+-- ─────────────────────────────────────────
+-- SITE MEDIA
+-- ─────────────────────────────────────────
+create table if not exists public.site_media (
+  id uuid default gen_random_uuid() primary key,
+  project_id uuid references public.projects on delete cascade not null,
+  user_id uuid references auth.users on delete cascade not null,
+  url text not null,
+  description text,
+  media_type text not null default 'photo',
+  uploaded_at timestamptz default now()
+);
+
+alter table public.site_media add column if not exists project_id uuid references public.projects on delete cascade;
+alter table public.site_media add column if not exists user_id uuid references auth.users on delete cascade;
+alter table public.site_media add column if not exists description text;
+alter table public.site_media add column if not exists media_type text not null default 'photo';
+alter table public.site_media add column if not exists uploaded_at timestamptz default now();
+
+alter table public.site_media enable row level security;
+
+drop policy if exists "Users can manage own site media" on public.site_media;
+
+create policy "Users can manage own site media"
+  on public.site_media for all using (auth.uid() = user_id);
+
+-- ─────────────────────────────────────────
+-- ISSUES
+-- ─────────────────────────────────────────
+create table if not exists public.issues (
+  id uuid default gen_random_uuid() primary key,
+  project_id uuid references public.projects on delete cascade not null,
+  user_id uuid references auth.users on delete cascade not null,
+  title text not null,
+  description text,
+  priority text not null default 'medium',
+  status text not null default 'open',
+  assigned_to uuid references auth.users,
   due_date date,
-  created_by uuid references auth.users on delete set null,
+  photo_url text,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
 
-alter table public.tasks enable row level security;
+alter table public.issues add column if not exists project_id uuid references public.projects on delete cascade;
+alter table public.issues add column if not exists user_id uuid references auth.users on delete cascade;
+alter table public.issues add column if not exists description text;
+alter table public.issues add column if not exists priority text not null default 'medium';
+alter table public.issues add column if not exists status text not null default 'open';
+alter table public.issues add column if not exists assigned_to uuid references auth.users;
+alter table public.issues add column if not exists due_date date;
+alter table public.issues add column if not exists photo_url text;
+alter table public.issues add column if not exists created_at timestamptz default now();
+alter table public.issues add column if not exists updated_at timestamptz default now();
 
-create policy "Workspace members can view tasks"
-  on public.tasks for select
-  using (
-    exists (
-      select 1 from public.workspaces w
-      left join public.workspace_members wm on wm.workspace_id = w.id
-      where w.id = tasks.workspace_id
-        and (w.owner_id = auth.uid() or wm.user_id = auth.uid())
-    )
-  );
+alter table public.issues enable row level security;
 
-create policy "Workspace members can create tasks"
-  on public.tasks for insert
-  with check (
-    exists (
-      select 1 from public.workspaces w
-      left join public.workspace_members wm on wm.workspace_id = w.id
-      where w.id = workspace_id
-        and (w.owner_id = auth.uid() or wm.user_id = auth.uid())
-    )
-  );
+drop policy if exists "Users can manage own issues" on public.issues;
 
-create policy "Workspace members can update tasks"
-  on public.tasks for update
-  using (
-    exists (
-      select 1 from public.workspaces w
-      left join public.workspace_members wm on wm.workspace_id = w.id
-      where w.id = tasks.workspace_id
-        and (w.owner_id = auth.uid() or wm.user_id = auth.uid())
-    )
-  );
-
-create policy "Task creator can delete task"
-  on public.tasks for delete
-  using (created_by = auth.uid());
+create policy "Users can manage own issues"
+  on public.issues for all using (auth.uid() = user_id);
 
 -- ─────────────────────────────────────────
--- TASK COMMENTS
+-- REPORTS
 -- ─────────────────────────────────────────
-create table if not exists public.task_comments (
+create table if not exists public.reports (
   id uuid default gen_random_uuid() primary key,
-  task_id uuid references public.tasks on delete cascade not null,
+  project_id uuid references public.projects on delete set null,
   user_id uuid references auth.users on delete cascade not null,
-  content text not null,
+  title text not null,
+  content text,
   created_at timestamptz default now()
 );
 
-alter table public.task_comments enable row level security;
+alter table public.reports add column if not exists project_id uuid references public.projects on delete set null;
+alter table public.reports add column if not exists user_id uuid references auth.users on delete cascade;
+alter table public.reports add column if not exists content text;
+alter table public.reports add column if not exists created_at timestamptz default now();
 
-create policy "Task comment visibility follows task access"
-  on public.task_comments for select
-  using (
-    exists (
-      select 1 from public.tasks t
-      join public.workspaces w on w.id = t.workspace_id
-      left join public.workspace_members wm on wm.workspace_id = w.id
-      where t.id = task_comments.task_id
-        and (w.owner_id = auth.uid() or wm.user_id = auth.uid())
-    )
-  );
+alter table public.reports enable row level security;
 
-create policy "Workspace members can add comments"
-  on public.task_comments for insert
-  with check (auth.uid() = user_id);
+drop policy if exists "Users can manage own reports" on public.reports;
+
+create policy "Users can manage own reports"
+  on public.reports for all using (auth.uid() = user_id);
 
 -- ─────────────────────────────────────────
 -- DOCUMENTS
 -- ─────────────────────────────────────────
 create table if not exists public.documents (
   id uuid default gen_random_uuid() primary key,
-  workspace_id uuid references public.workspaces on delete cascade not null,
-  title text not null,
-  content text,
-  folder text default 'General',
-  is_knowledge_base boolean default false,
-  created_by uuid references auth.users on delete set null,
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
+  project_id uuid references public.projects on delete set null,
+  user_id uuid references auth.users on delete cascade not null,
+  name text not null,
+  url text not null,
+  file_type text,
+  size_bytes bigint,
+  uploaded_at timestamptz default now()
 );
+
+alter table public.documents add column if not exists project_id uuid references public.projects on delete set null;
+alter table public.documents add column if not exists user_id uuid references auth.users on delete cascade;
+alter table public.documents add column if not exists file_type text;
+alter table public.documents add column if not exists size_bytes bigint;
+alter table public.documents add column if not exists uploaded_at timestamptz default now();
 
 alter table public.documents enable row level security;
 
-create policy "Workspace members can view documents"
-  on public.documents for select
-  using (
-    exists (
-      select 1 from public.workspaces w
-      left join public.workspace_members wm on wm.workspace_id = w.id
-      where w.id = documents.workspace_id
-        and (w.owner_id = auth.uid() or wm.user_id = auth.uid())
-    )
-  );
+drop policy if exists "Users can manage own documents" on public.documents;
 
-create policy "Workspace members can create documents"
-  on public.documents for insert
-  with check (
-    exists (
-      select 1 from public.workspaces w
-      left join public.workspace_members wm on wm.workspace_id = w.id
-      where w.id = workspace_id
-        and (w.owner_id = auth.uid() or wm.user_id = auth.uid())
-    )
-  );
-
-create policy "Workspace members can update documents"
-  on public.documents for update
-  using (
-    exists (
-      select 1 from public.workspaces w
-      left join public.workspace_members wm on wm.workspace_id = w.id
-      where w.id = documents.workspace_id
-        and (w.owner_id = auth.uid() or wm.user_id = auth.uid())
-    )
-  );
-
-create policy "Document creator can delete"
-  on public.documents for delete
-  using (created_by = auth.uid());
+create policy "Users can manage own documents"
+  on public.documents for all using (auth.uid() = user_id);
 
 -- ─────────────────────────────────────────
--- AUTOMATION WORKFLOWS
+-- TEAM MEMBERS
 -- ─────────────────────────────────────────
-create table if not exists public.automation_workflows (
+create table if not exists public.team_members (
   id uuid default gen_random_uuid() primary key,
-  workspace_id uuid references public.workspaces on delete cascade not null,
-  name text not null,
-  trigger_description text not null,
-  action_description text not null,
-  is_active boolean default true,
-  run_count integer default 0,
-  last_run_at timestamptz,
-  created_by uuid references auth.users on delete set null,
+  invited_by uuid references auth.users on delete cascade not null,
+  email text not null,
+  full_name text,
+  role text not null default 'viewer',
+  status text not null default 'invited',
+  invited_at timestamptz default now()
+);
+
+alter table public.team_members add column if not exists invited_by uuid references auth.users on delete cascade;
+alter table public.team_members add column if not exists full_name text;
+alter table public.team_members add column if not exists role text not null default 'viewer';
+alter table public.team_members add column if not exists status text not null default 'invited';
+alter table public.team_members add column if not exists invited_at timestamptz default now();
+
+alter table public.team_members enable row level security;
+
+drop policy if exists "Users can manage their team members" on public.team_members;
+
+create policy "Users can manage their team members"
+  on public.team_members for all using (auth.uid() = invited_by);
+
+-- ─────────────────────────────────────────
+-- NOTIFICATIONS
+-- ─────────────────────────────────────────
+create table if not exists public.notifications (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users on delete cascade not null,
+  project_id uuid references public.projects on delete set null,
+  title text not null,
+  body text,
+  type text not null default 'info',
+  read boolean not null default false,
   created_at timestamptz default now()
 );
 
-alter table public.automation_workflows enable row level security;
+alter table public.notifications add column if not exists user_id uuid references auth.users on delete cascade;
+alter table public.notifications add column if not exists project_id uuid references public.projects on delete set null;
+alter table public.notifications add column if not exists body text;
+alter table public.notifications add column if not exists type text not null default 'info';
+alter table public.notifications add column if not exists read boolean not null default false;
+alter table public.notifications add column if not exists created_at timestamptz default now();
 
-create policy "Workspace members can view workflows"
-  on public.automation_workflows for select
-  using (
-    exists (
-      select 1 from public.workspaces w
-      left join public.workspace_members wm on wm.workspace_id = w.id
-      where w.id = automation_workflows.workspace_id
-        and (w.owner_id = auth.uid() or wm.user_id = auth.uid())
-    )
-  );
+alter table public.notifications enable row level security;
 
-create policy "Workspace members can manage workflows"
-  on public.automation_workflows for all
-  using (
-    exists (
-      select 1 from public.workspaces w
-      left join public.workspace_members wm on wm.workspace_id = w.id
-      where w.id = automation_workflows.workspace_id
-        and (w.owner_id = auth.uid() or wm.user_id = auth.uid())
-    )
-  );
+drop policy if exists "Users can view own notifications" on public.notifications;
+drop policy if exists "Users can update own notifications" on public.notifications;
 
--- ─────────────────────────────────────────
--- ACTIVITY LOG
--- ─────────────────────────────────────────
-create table if not exists public.activity_log (
-  id uuid default gen_random_uuid() primary key,
-  workspace_id uuid references public.workspaces on delete cascade not null,
-  user_id uuid references auth.users on delete set null,
-  action text not null,
-  resource_type text,
-  resource_id uuid,
-  meta jsonb,
-  created_at timestamptz default now()
-);
-
-alter table public.activity_log enable row level security;
-
-create policy "Workspace members can view activity"
-  on public.activity_log for select
-  using (
-    exists (
-      select 1 from public.workspaces w
-      left join public.workspace_members wm on wm.workspace_id = w.id
-      where w.id = activity_log.workspace_id
-        and (w.owner_id = auth.uid() or wm.user_id = auth.uid())
-    )
-  );
-
-create policy "System can insert activity"
-  on public.activity_log for insert
-  with check (true);
-
--- ─────────────────────────────────────────
--- WORKSPACE SUBSCRIPTIONS
--- ─────────────────────────────────────────
-create table if not exists public.workspace_subscriptions (
-  id uuid default gen_random_uuid() primary key,
-  workspace_id uuid references public.workspaces on delete cascade not null unique,
-  plan text not null default 'starter' check (plan in ('starter', 'professional', 'enterprise')),
-  status text not null default 'active' check (status in ('active', 'cancelled', 'past_due')),
-  selar_reference text,
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
-);
-
-alter table public.workspace_subscriptions enable row level security;
-
-create policy "Workspace owner can view subscription"
-  on public.workspace_subscriptions for select
-  using (
-    exists (
-      select 1 from public.workspaces
-      where id = workspace_subscriptions.workspace_id and owner_id = auth.uid()
-    )
-  );
+create policy "Users can view own notifications"
+  on public.notifications for select using (auth.uid() = user_id);
+create policy "Users can update own notifications"
+  on public.notifications for update using (auth.uid() = user_id);
