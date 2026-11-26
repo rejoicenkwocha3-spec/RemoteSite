@@ -143,107 +143,11 @@ export default function HomePage() {
             <Link href="/signup" className="btn-primary" style={{ fontSize: "1rem", padding: "0.875rem 2rem" }}>
               Get Started <ArrowRight size={18} />
             </Link>
-            <Link href="/platform" className="btn-secondary" style={{ fontSize: "1rem", padding: "0.875rem 2rem", color: "#FFFFFF", borderColor: "rgba(255,255,255,0.25)", backgroundColor: "rgba(255,255,255,0.08)" }}>
-              Explore Platform
+            <Link href="/login" className="btn-secondary" style={{ fontSize: "1rem", padding: "0.875rem 2rem", color: "#FFFFFF", borderColor: "rgba(255,255,255,0.25)", backgroundColor: "rgba(255,255,255,0.08)" }}>
+              Sign In
             </Link>
           </div>
 
-          {/* Dashboard preview mockup */}
-          <div style={{
-            marginTop: "4rem",
-            background: "#FFFFFF",
-            borderRadius: "1rem",
-            border: "1px solid #E2E6F0",
-            boxShadow: "0 24px 80px rgba(0,0,0,0.3)",
-            overflow: "hidden",
-            maxWidth: "900px",
-            margin: "4rem auto 0",
-          }}>
-            {/* Browser chrome */}
-            <div style={{ background: "#F7F8FA", borderBottom: "1px solid #E2E6F0", padding: "0.75rem 1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <div style={{ display: "flex", gap: "0.375rem" }}>
-                <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#EF4444" }} />
-                <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#F59E0B" }} />
-                <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#10B981" }} />
-              </div>
-              <div style={{ flex: 1, background: "#E2E6F0", borderRadius: "0.25rem", height: "24px", maxWidth: "280px", margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <span style={{ fontSize: "0.75rem", color: "#6B7280" }}>app.remotesite.io/dashboard</span>
-              </div>
-            </div>
-
-            {/* Dashboard content */}
-            <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", minHeight: "380px" }}>
-              {/* Sidebar */}
-              <div style={{ background: "#101828", padding: "1.25rem 0.75rem", borderRight: "1px solid rgba(255,255,255,0.08)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0 0.5rem 1rem", marginBottom: "0.5rem", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-                  <div style={{ width: 24, height: 24, borderRadius: "6px", background: "#0039FF", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <span style={{ color: "#fff", fontSize: "0.6875rem", fontWeight: 800 }}>RS</span>
-                  </div>
-                  <span style={{ color: "#FFFFFF", fontWeight: 700, fontSize: "0.8125rem" }}>RemoteSite</span>
-                </div>
-                {["Overview", "My Projects", "Site Monitoring", "AI Insights", "Reports", "Team"].map((item, i) => (
-                  <div key={item} style={{
-                    padding: "0.5rem 0.75rem",
-                    borderRadius: "0.375rem",
-                    color: i === 0 ? "#FFFFFF" : "rgba(255,255,255,0.5)",
-                    background: i === 0 ? "rgba(0,57,255,0.3)" : "transparent",
-                    fontSize: "0.8125rem",
-                    marginBottom: "0.125rem",
-                    fontWeight: i === 0 ? 600 : 400,
-                  }}>
-                    {item}
-                  </div>
-                ))}
-              </div>
-
-              {/* Main area */}
-              <div style={{ background: "#F7F8FA", padding: "1.25rem" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: "1rem", color: "#101828", fontFamily: "var(--font-manrope)" }}>Project Overview</div>
-                    <div style={{ fontSize: "0.75rem", color: "#6B7280" }}>November 2026</div>
-                  </div>
-                  <div style={{ background: "#0039FF", color: "#fff", fontSize: "0.6875rem", padding: "0.25rem 0.625rem", borderRadius: "0.375rem", fontWeight: 600 }}>+ New Project</div>
-                </div>
-
-                {/* Stats row */}
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "0.625rem", marginBottom: "1rem" }}>
-                  {[
-                    { label: "Total Projects", val: "12" },
-                    { label: "Active Sites", val: "8" },
-                    { label: "On Track", val: "6" },
-                    { label: "At Risk", val: "2" },
-                  ].map((s) => (
-                    <div key={s.label} style={{ background: "#FFFFFF", borderRadius: "0.5rem", padding: "0.625rem 0.75rem", border: "1px solid #E2E6F0" }}>
-                      <div style={{ fontSize: "1.25rem", fontWeight: 800, color: "#101828", fontFamily: "var(--font-manrope)" }}>{s.val}</div>
-                      <div style={{ fontSize: "0.625rem", color: "#6B7280" }}>{s.label}</div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Project list preview */}
-                <div style={{ background: "#FFFFFF", borderRadius: "0.5rem", border: "1px solid #E2E6F0", overflow: "hidden" }}>
-                  {[
-                    { name: "Riverside Tower", pct: 72, status: "On Track" },
-                    { name: "Harbour View Residences", pct: 45, status: "At Risk" },
-                    { name: "Central Business Hub", pct: 91, status: "On Track" },
-                  ].map((p) => (
-                    <div key={p.name} style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.625rem 0.875rem", borderBottom: "1px solid #F3F4F6" }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "#101828" }}>{p.name}</div>
-                        <div style={{ background: "#E2E6F0", borderRadius: "9999px", height: "4px", marginTop: "0.25rem", overflow: "hidden" }}>
-                          <div style={{ width: `${p.pct}%`, height: "100%", background: "#0039FF", borderRadius: "9999px" }} />
-                        </div>
-                      </div>
-                      <div style={{ fontSize: "0.625rem", fontWeight: 600, color: p.status === "On Track" ? "#065F46" : "#92400E", background: p.status === "On Track" ? "#D1FAE5" : "#FEF3C7", padding: "0.125rem 0.375rem", borderRadius: "9999px" }}>
-                        {p.status}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
       </section>
 
